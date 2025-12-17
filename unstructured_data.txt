@@ -1,0 +1,6 @@
+# unstructured_data.txt
+DOCUMENT TITLE: Remote Work Policy
+The company supports a flexible remote work policy. All employees can work remotely up to two days per week, provided they have manager approval and maintain productivity. For full-time remote roles, a separate agreement is required.
+
+DOCUMENT TITLE: Q3 2024 Strategy Overview
+The primary strategic focus for Q3 2024 is the launch of the "Phoenix" product line and the expansion into the European market. We are allocating 60% of our R&D budget to Phoenix development.
