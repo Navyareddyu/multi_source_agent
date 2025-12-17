@@ -1,2 +1,2 @@
 requirements.txt
-langchain-openAI
+langchain_ollama
