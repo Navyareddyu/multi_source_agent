@@ -2,21 +2,25 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/agent.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/agent.py"
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
     }
   ],
   "env": {
-    "PYTHON_VERSION": "3.11"
+    "PYTHON_VERSION": "3.9"
   },
   "functions": {
-    "api/agent.py": {
+    "api/index.py": {
       "maxDuration": 30
     }
   }

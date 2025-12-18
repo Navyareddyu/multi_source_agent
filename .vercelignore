@@ -1,0 +1,13 @@
+# Exclude unnecessary files from Vercel deployment
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+agent_data.db
+__pycache__/
+*.pyc
+.env
+.vscode/
+.DS_Store
+*.log
+
