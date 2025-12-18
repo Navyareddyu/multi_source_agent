@@ -1,24 +1,11 @@
 """
-Vercel serverless function for /api/chat endpoint
+Vercel serverless function for /api/chat
+Each file in api/ becomes a serverless function at that path
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional
-import os
+from http.server import BaseHTTPRequestHandler
 import json
-
-app = FastAPI()
-
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+import os
 
 # Embedded Data
 EMBEDDED_DB_DATA = [
@@ -35,19 +22,6 @@ The company supports a flexible remote work policy. All employees can work remot
     "company strategy": """DOCUMENT TITLE: Company Strategy
 Our strategy focuses on three key pillars: innovation, customer satisfaction, and sustainable growth. We prioritize long-term value creation over short-term gains.""",
 }
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    message: str
-    conversation_history: Optional[List[ChatMessage]] = []
-
-class ChatResponse(BaseModel):
-    response: str
-    tool_used: Optional[str] = None
-    context: Optional[str] = None
 
 def run_sql_query(query: str) -> str:
     try:
@@ -117,52 +91,72 @@ def generate_response(question: str, context: str) -> str:
 
 **Note**: For full LLM processing, set OPENAI_API_KEY environment variable in Vercel."""
 
-@app.post("/")
-async def chat(request: ChatRequest):
-    """Handle chat requests"""
-    try:
-        question = request.message
-        question_lower = question.lower()
-        
-        tool_used = None
-        context = ""
-        
-        if any(word in question_lower for word in ['revenue', 'profit', 'q1', 'q2', 'employees', 'metric']):
-            tool_used = "sql"
-            if 'revenue' in question_lower:
-                if 'q1' in question_lower:
-                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Revenue' AND quarter='Q1'")
-                elif 'q2' in question_lower:
-                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Revenue' AND quarter='Q2'")
+class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+    
+    def do_POST(self):
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            question = data.get('message', '')
+            question_lower = question.lower()
+            
+            tool_used = None
+            context = ""
+            
+            if any(word in question_lower for word in ['revenue', 'profit', 'q1', 'q2', 'employees', 'metric']):
+                tool_used = "sql"
+                if 'revenue' in question_lower:
+                    if 'q1' in question_lower:
+                        context = run_sql_query("SELECT * FROM company_records WHERE metric='Revenue' AND quarter='Q1'")
+                    elif 'q2' in question_lower:
+                        context = run_sql_query("SELECT * FROM company_records WHERE metric='Revenue' AND quarter='Q2'")
+                    else:
+                        context = run_sql_query("SELECT * FROM company_records WHERE metric='Revenue'")
+                elif 'profit' in question_lower:
+                    if 'q1' in question_lower:
+                        context = run_sql_query("SELECT * FROM company_records WHERE metric='Profit' AND quarter='Q1'")
+                    elif 'q2' in question_lower:
+                        context = run_sql_query("SELECT * FROM company_records WHERE metric='Profit' AND quarter='Q2'")
+                    else:
+                        context = run_sql_query("SELECT * FROM company_records WHERE metric='Profit'")
+                elif 'employees' in question_lower:
+                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Total Employees'")
                 else:
-                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Revenue'")
-            elif 'profit' in question_lower:
-                if 'q1' in question_lower:
-                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Profit' AND quarter='Q1'")
-                elif 'q2' in question_lower:
-                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Profit' AND quarter='Q2'")
-                else:
-                    context = run_sql_query("SELECT * FROM company_records WHERE metric='Profit'")
-            elif 'employees' in question_lower:
-                context = run_sql_query("SELECT * FROM company_records WHERE metric='Total Employees'")
+                    context = run_sql_query("SELECT * FROM company_records")
+            elif any(word in question_lower for word in ['policy', 'remote', 'work', 'strategy', 'document']):
+                tool_used = "document_search"
+                context = document_search(question)
             else:
-                context = run_sql_query("SELECT * FROM company_records")
-        elif any(word in question_lower for word in ['policy', 'remote', 'work', 'strategy', 'document']):
-            tool_used = "document_search"
-            context = document_search(question)
-        else:
-            tool_used = "both"
-            doc_result = document_search(question)
-            sql_result = run_sql_query("SELECT * FROM company_records LIMIT 3")
-            context = f"{doc_result}\n\n{sql_result}"
-        
-        response_text = generate_response(question, context)
-        
-        return ChatResponse(
-            response=response_text,
-            tool_used=tool_used,
-            context=context[:200] + "..." if len(context) > 200 else context
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+                tool_used = "both"
+                doc_result = document_search(question)
+                sql_result = run_sql_query("SELECT * FROM company_records LIMIT 3")
+                context = f"{doc_result}\n\n{sql_result}"
+            
+            response_text = generate_response(question, context)
+            
+            response = {
+                "response": response_text,
+                "tool_used": tool_used,
+                "context": context[:200] + "..." if len(context) > 200 else context
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
