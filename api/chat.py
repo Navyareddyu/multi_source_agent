@@ -90,13 +90,27 @@ def generate_response(question: str, context: str) -> str:
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"Error using LLM: {e}. Here's the context: {context}"
+            # Return formatted context data if LLM fails (better than error message)
+            error_msg = str(e)
+            if "Insufficient Balance" in error_msg or "402" in error_msg:
+                return f"""Based on the available information:
+
+{context}
+
+*Note: AI processing is currently unavailable due to insufficient API balance. The data above contains all the relevant information.*"""
+            else:
+                return f"""Based on the available information:
+
+{context}
+
+*Note: AI processing encountered an error. The data above contains all the relevant information.*"""
     
+    # No API key - return formatted context
     return f"""Based on the available information:
 
 {context}
 
-**Note**: For full LLM processing, set DEEPSEEK_API_KEY environment variable in Vercel."""
+**Note**: For AI-processed responses, add DEEPSEEK_API_KEY or OPENAI_API_KEY in Vercel environment variables."""
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
