@@ -90,7 +90,14 @@ def generate_response(question: str, context: str) -> str:
             )
             return response.choices[0].message.content
         except Exception as e:
-            pass  # Try next option
+            # Log error but continue to next option
+            error_str = str(e)
+            # Only skip if it's a real error, not just a failed connection
+            if "401" not in error_str and "403" not in error_str:
+                pass  # Try next option
+            else:
+                # Authentication errors mean key is wrong, skip Groq
+                pass
     
     # 2. Try DeepSeek API
     deepseek_key = os.getenv("DEEPSEEK_API_KEY")
