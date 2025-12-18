@@ -68,13 +68,35 @@ def document_search(query: str) -> str:
         return f"Document search error: {e}"
 
 def generate_response(question: str, context: str) -> str:
-    # Try DeepSeek API first, then fall back to OpenAI format
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+    # Try multiple free LLM APIs in order of preference
     
+    # 1. Try Groq (Free tier - 30 requests/minute, very fast)
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key:
+        try:
+            import openai
+            client = openai.OpenAI(
+                api_key=groq_key,
+                base_url="https://api.groq.com/openai/v1"
+            )
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",  # Fast and free
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant. Answer the user's question based on the provided context. Be concise and accurate."},
+                    {"role": "user", "content": f"Question: {question}\n\nContext: {context}\n\nAnswer:"}
+                ],
+                max_tokens=500,
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            pass  # Try next option
+    
+    # 2. Try DeepSeek API
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
     if deepseek_key:
         try:
             import openai
-            # DeepSeek uses OpenAI-compatible API but different endpoint
             client = openai.OpenAI(
                 api_key=deepseek_key,
                 base_url="https://api.deepseek.com/v1"
@@ -90,27 +112,33 @@ def generate_response(question: str, context: str) -> str:
             )
             return response.choices[0].message.content
         except Exception as e:
-            # Return formatted context data if LLM fails (better than error message)
-            error_msg = str(e)
-            if "Insufficient Balance" in error_msg or "402" in error_msg:
-                return f"""Based on the available information:
-
-{context}
-
-*Note: AI processing is currently unavailable due to insufficient API balance. The data above contains all the relevant information.*"""
-            else:
-                return f"""Based on the available information:
-
-{context}
-
-*Note: AI processing encountered an error. The data above contains all the relevant information.*"""
+            pass  # Try next option
     
-    # No API key - return formatted context
+    # 3. Try OpenAI API (fallback)
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        try:
+            import openai
+            client = openai.OpenAI(api_key=openai_key)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant. Answer the user's question based on the provided context. Be concise and accurate."},
+                    {"role": "user", "content": f"Question: {question}\n\nContext: {context}\n\nAnswer:"}
+                ],
+                max_tokens=500,
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            pass
+    
+    # No API key or all failed - return formatted context
     return f"""Based on the available information:
 
 {context}
 
-**Note**: For AI-processed responses, add DEEPSEEK_API_KEY or OPENAI_API_KEY in Vercel environment variables."""
+**Note**: For AI-processed responses, add GROQ_API_KEY (free), DEEPSEEK_API_KEY, or OPENAI_API_KEY in Vercel environment variables."""
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
