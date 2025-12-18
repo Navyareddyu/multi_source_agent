@@ -68,18 +68,25 @@ def document_search(query: str) -> str:
         return f"Document search error: {e}"
 
 def generate_response(question: str, context: str) -> str:
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if openai_key:
+    # Try DeepSeek API first, then fall back to OpenAI format
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+    
+    if deepseek_key:
         try:
             import openai
-            client = openai.OpenAI(api_key=openai_key)
+            # DeepSeek uses OpenAI-compatible API but different endpoint
+            client = openai.OpenAI(
+                api_key=deepseek_key,
+                base_url="https://api.deepseek.com/v1"
+            )
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant. Answer the user's question based on the provided context. Be concise and accurate."},
                     {"role": "user", "content": f"Question: {question}\n\nContext: {context}\n\nAnswer:"}
                 ],
-                max_tokens=500
+                max_tokens=500,
+                temperature=0.7
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -89,7 +96,7 @@ def generate_response(question: str, context: str) -> str:
 
 {context}
 
-**Note**: For full LLM processing, set OPENAI_API_KEY environment variable in Vercel."""
+**Note**: For full LLM processing, set DEEPSEEK_API_KEY environment variable in Vercel."""
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
